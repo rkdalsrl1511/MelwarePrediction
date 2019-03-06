@@ -1,52 +1,50 @@
-머신러닝 조별 프로젝트
+머신?��?�� 조별 ?��로젝?��
 ================
-오준승-윤휘영-김수현-강민기
-2019년 2월 26일
+?��준?��-?��?��?��-김?��?��-강�?�기
+2019?�� 2?�� 26?��
 
 `{r setup, include=FALSE} knitr::opts_chunk$set(echo = TRUE)`
 
-필요 패키지 불러오기 & 작업공간 설정하기
+?��?�� ?��?��지 불러?���? & ?��?��공간 ?��?��?���?
 ----------------------------------------
 
 ``` {r}
 library(tidyverse)
 library(dplyr)
-library(randomForest) # 랜덤포레스트
-library(rpart) # 의사결정나무 
-library(caret) # 혼동행렬에 필요한 패키지
-library(MLmetrics) # F1 점수에 필요한 패키지
+library(randomForest) # ?��?��?��?��?��?��
+library(rpart) # ?��?��결정?���? 
+library(caret) # ?��?��?��?��?�� ?��?��?�� ?��?��지
+library(MLmetrics) # F1 ?��?��?�� ?��?��?�� ?��?��지
 library(purrr)
 library(e1071)
 library(xgboost) # xgboost
-library(ROCR) # roc 커브에 필요한 패키지
+library(ROCR) # roc 커브?�� ?��?��?�� ?��?��지
 library(pROC) # auroc
-library(knitr)
 
-setwd('d:/fastcampus/') # 작업공간 설정하기
-getwd() # 설정된 작업공간 확인하기
-knit("RmarkDown.Rmd")
+setwd('d:/fastcampus/') # ?��?��공간 ?��?��?���?
+getwd() # ?��?��?�� ?��?��공간 ?��?��?���?
 ```
 
 ``` {r}
-# 레벨을 빈도에 따라 50개로 압축하는 함수
-# 인자 : 목표변수(trainset.q$HasDetections), 입력변수(trainset.q[,factor.name[i]])
+# ?��벨을 빈도?�� ?��?�� 50개로 ?��축하?�� ?��?��
+# ?��?�� : 목표변?��(trainset.q$HasDetections), ?��?��변?��(trainset.q[,factor.name[i]])
 CompressLevels <- function(object, input, Nlevel = 50){
     
-    # factor의 레벨에 따른 목표변수의 0과 1의 빈도를 지역변수에 할당
+    # factor?�� ?��벨에 ?���? 목표변?��?�� 0�? 1?�� 빈도�? 지?��변?��?�� ?��?��
     detector <- by(object,
                    input,
                    table)
     
-    # 레벨 축소를 위해서 임시적으로 character로 변환
+    # ?���? 축소�? ?��?��?�� ?��?��?��?���? character�? 변?��
     input <- as.character(input)
     
-    # 레벨의 수가 50개 이상인 경우
+    # ?��벨의 ?��가 50�? ?��?��?�� 경우
     if(length(detector) > Nlevel){
       
-      # 레벨에 따른 백분율을 담을 새로운 객체
+      # ?��벨에 ?���? 백분?��?�� ?��?�� ?��로운 객체
       detector.prop.vector <- c()
       
-      # 각 레벨에 따른 빈도를 백분율로 전환하기
+      # �? ?��벨에 ?���? 빈도�? 백분?���? ?��?��?���?
       for (k in 1:length(detector)) {
         
         detector.prop <- 100 * detector[[k]][1] / (detector[[k]][1] + detector[[k]][2])
@@ -55,24 +53,24 @@ CompressLevels <- function(object, input, Nlevel = 50){
         
       }
       
-      # cut을 통해서 factor로 전환하기
+      # cut?�� ?��?��?�� factor�? ?��?��?���?
       detector.prop.factor <- cut(detector.prop.vector,
                                   breaks = seq(from = 0,
                                                to = 100,
                                                by = 100 / Nlevel),
                                   right = FALSE)
       
-      # cut을 통해 변환된 factor를 적용하기
+      # cut?�� ?��?�� 변?��?�� factor�? ?��?��?���?
       for(k in 1:length(detector)){
         
-        # 그 레벨에 해당하는 수들을 전부 그 레벨 값으로 바꾸기
+        # �? ?��벨에 ?��?��?��?�� ?��?��?�� ?��부 �? ?���? 값으�? 바꾸�?
         
-        # 백분율이 100이라서, 해당 레벨이 NA값인 경우
+        # 백분?��?�� 100?��?��?��, ?��?�� ?��벨이 NA값인 경우
         if(is.na(detector.prop.factor[k])){
           
           input[input == names(detector)[k]] <- '[all]'
           
-          # 그 외
+          # �? ?��
         }else{
           
           input[input == names(detector)[k]] <- as.character(detector.prop.factor[k])
@@ -83,14 +81,14 @@ CompressLevels <- function(object, input, Nlevel = 50){
       
     }
   
-    # 다시 factor로 변환
+    # ?��?�� factor�? 변?��
     input <- as.factor(input)
     
     return(input)
     
 }
 
-# 레벨의 이름을 원하는 만큼 잘라주는 함수
+# ?��벨의 ?��름을 ?��?��?�� 만큼 ?��?��주는 ?��?��
 CutLevels <- function(data.variable, start, end){
   
   data.variable <- data.variable %>% as.character()
@@ -102,8 +100,8 @@ CutLevels <- function(data.variable, start, end){
   
 }
 
-# NA를 '미응답'(default)으로 변환하고, factor로 변환해주는 함수
-NAtoFactor <- function(data.variable, NA.message = '미응답'){
+# NA�? '미응?��'(default)?���? 변?��?���?, factor�? 변?��?��주는 ?��?��
+NAtoFactor <- function(data.variable, NA.message = '미응?��'){
   
   data.variable <- as.character(data.variable)
   
@@ -116,17 +114,17 @@ NAtoFactor <- function(data.variable, NA.message = '미응답'){
 }
 ```
 
-데이터셋 불러오기
+?��?��?��?�� 불러?���?
 =================
 
 ``` {r}
 dataset <- read.csv(file = 'trainset_mini.csv',
                     header = TRUE)
 
-# 이름 제거하기
+# ?���? ?��거하�?
 dataset <- dataset[,-1]
 
-# HasDetections : 목표변수. factor로 변환
+# HasDetections : 목표변?��. factor�? 변?��
 dataset$HasDetections <- as.factor(dataset$HasDetections)
 dataset$HasDetections <- relevel(dataset$HasDetections, ref = '1')
 ```
@@ -135,48 +133,48 @@ dataset$HasDetections <- relevel(dataset$HasDetections, ref = '1')
 ----------------------
 
 <div style = "color:red">
-1.  데이터셋 출처
+1.  ?��?��?��?�� 출처
     </div>
     <https://www.kaggle.com/c/microsoft-malware-prediction>
 
-<br>Kaggle Research Prediction Competition<br>( kaggle에서 주관하는 예측 대회)<br> 실제 데이터는 약 1500만행, 83개의 column을 가지고 있다.<br> 그 중에서 800만행은 목표변수를 포함하여 trainset으로 제공하고 있으며, 나머지 700만행에는 목표변수를 제외하여 testset으로 제공하고 있다.<br><br>목표변수는 HasDetections라는 컬럼으로서, 1과 0으로 이루어져 있기 때문에 우리들의 목적은 이진분류를 통한 악성코드 감염 여부 예측이라고 할 수 있겠다.<br><br> 우리조는 각 조원들의 컴퓨터 여건을 고려하여 trainset 데이터 중에서 **1%만을 sample함수로 추출하여 이것을 다시 0.7:0.3의 비율로 trainset과 validationset**으로 나누어서 예측에 대한 지표들을 확인하기로 하였다.<br><br><br><br>
+<br>Kaggle Research Prediction Competition<br>( kaggle?��?�� 주�?�?��?�� ?���? ??�?��)<br> ?��?�� ?��?��?��?�� ?�� 1500만행, 83개의 column?�� 가지�? ?��?��.<br> �? 중에?�� 800만행??� 목표변?���? ?��?��?��?�� trainset?���? ?��공하�? ?��?���?, ?��머�?� 700만행?��?�� 목표변?���? ?��?��?��?�� testset?���? ?��공하�? ?��?��.<br><br>목표변?��?�� HasDetections?��?�� 컬럼?��로서, 1�? 0?���? ?��루어?�� ?���? ?��문에 ?��리들?�� 목적??� ?��진분류�?? ?��?�� ?��?��코드 감염 ?��부 ?��측이?���? ?�� ?�� ?��겠다.<br><br> ?��리조?�� �? 조원?��?�� 컴퓨?�� ?��건을 고려?��?�� trainset ?��?��?�� 중에?�� **1%만을 sample?��?���? 추출?��?�� ?��것을 ?��?�� 0.7:0.3?�� 비율�? trainset�? validationset**?���? ?��?��?��?�� ?��측에 ??�?�� 지?��?��?�� ?��?��?��기로 ?��??�?��.<br><br><br><br>
 <div style = "color:red">
-1.  데이터셋 구조
+1.  ?��?��?��?�� 구조
     </div>
-    **<데이터 변수 설명.hwp 참고>** 각 column의 설명 중 NA로서 마이크로스프트에서 특별한 주석을 제공하지 않은 변수 20개를 포함하여 제품이름(윈도우7~10)과 각종 Identifier들이 존재한다.<br>
+    **<?��?��?�� 변?�� ?���?.hwp 참고>** �? column?�� ?���? �? NA로서 마이?��로스?��?��?��?�� ?��별한 주석?�� ?��공하지 ?��??� 변?�� 20개�?? ?��?��?��?�� ?��?��?���?(?��?��?��7~10)�? 각종 Identifier?��?�� 존재?��?��.<br>
 
-**str을 통해 간단하게 확인해본 데이터셋**
-
-``` {r}
-str(dataset) # 데이터셋의 구조
-```
-
-<br><br> **1%로 샘플링한 데이터셋의 길이**
+**str?�� ?��?�� 간단?���? ?��?��?���? ?��?��?��?��**
 
 ``` {r}
-nrow(dataset) # 89155개
+str(dataset) # ?��?��?��?��?�� 구조
 ```
 
-<br><br> **1%로 샘플링한 데이터셋의 목표변수의 1과 0의 비율**
+<br><br> **1%�? ?��?��링한 ?��?��?��?��?�� 길이**
+
+``` {r}
+nrow(dataset) # 89155�?
+```
+
+<br><br> **1%�? ?��?��링한 ?��?��?��?��?�� 목표변?��?�� 1�? 0?�� 비율**
 
 ``` {r}
 dataset$HasDetections %>% table() %>% prop.table()
 ```
 
-<br><br> **각 변수별 NA값 확인하기**
+<br><br> **�? 변?���? NA�? ?��?��?���?**
 
 ``` {r}
 sapply(dataset, function(x) sum(is.na(x)))
 ```
 
-<br><br> 전처리 하기에 앞서서, NA가 있어도 자동으로 처리해줄 수 있는 모형이 있고, NA가 없어야만 하는 모형도 있다.<br>여러가지 모형들의 성능을 평가하기 위해서는 NA는 어떻게든 처리해주는 편이 좋을 것 같다.<br> 실제로 어떤 IT기업이 소비자들의 악성코드 감염 여부를 예측할 때, 모든 데이터를 전부 조사하기는 힘들 것이다.<br> 컴퓨터에 일가견이 있는 사람들을 제외한 대다수에 사람들이 자신의 컴퓨터에 대해서 잘 알지 못하며, 옵션들을 함부로 건들이기를 꺼려한다. 또한, 실제로 사용자들을 대상으로 악성코드에 대한 예측을 하고자할 때, **기업이 미쳐 확인하지 못한 것들이 있을 것이다. 이것들을 모두 고려하여 최대한 정확한 예측을 하는 모형이 기업이 원하는 모형일 것이다.** 따라서 NA라고 삭제해버리는 것은 안 좋은 선택일수도 있다.<br><br> 우리조에서 생각해볼 NA 전처리문제 해결법<br> 1. 보류한다.<br> 2. 모두 제거한다.<br> **3. 제 3의 범주로 만든다. ( 범주형으로 만들어서 해결하기 )**<br> **4. 대체값을 찾는다. (단, int형으로 만들 수 있는 변수들만)**<br> 5. 기타 방법<br><br><br> 위에서 말했듯이, 1번의 NA를 단순히 보류하는 것은 데이터 낭비일 수도 있다. 그리고 2번의 NA를 모두 제거하는 것은 사실상 NA를 보류하는 것과 같은 말이다. 그리고 우리가 정말 고려해야할 방법은 3번과 4번일 것이다.<br> 5번의 경우는, 일단 모형을 만들어보고, 각 변수들 중 중요도가 높은 것들을 중심으로 전처리하는 방식 등이 있을 것이다. 이 방식들은 이 프로젝트가 끝난 후에 개인적으로 만들어볼 생각이다.<br><br><br><br>
+<br><br> ?��처리 ?��기에 ?��?��?��, NA가 ?��?��?�� ?��?��?���? 처리?���? ?�� ?��?�� 모형?�� ?���?, NA가 ?��?��?���? ?��?�� 모형?�� ?��?��.<br>?��?��가지 모형?��?�� ?��?��?�� ?��가?���? ?��?��?��?�� NA?�� ?��?��게든 처리?��주는 ?��?�� 좋을 �? 같다.<br> ?��?���? ?��?�� IT기업?�� ?��비자?��?�� ?��?��코드 감염 ?��부�? ?��측할 ?��, 모든 ?��?��?���? ?��부 조사?��기는 ?��?�� 것이?��.<br> 컴퓨?��?�� ?��가견이 ?��?�� ?��?��?��?�� ?��?��?�� ??�?��?��?�� ?��?��?��?�� ?��?��?�� 컴퓨?��?�� ??�?��?�� ?�� ?��지 못하�?, ?��?��?��?�� ?��부�? 건들?��기�?? 꺼려?��?��. ?��?��, ?��?���? ?��?��?��?��?�� ??�?��?���? ?��?��코드?�� ??�?�� ?��측을 ?��고자?�� ?��, **기업?�� 미쳐 ?��?��?��지 못한 것들?�� ?��?�� 것이?��. ?��것들?�� 모두 고려?��?�� 최�?�?�� ?��?��?�� ?��측을 ?��?�� 모형?�� 기업?�� ?��?��?�� 모형?�� 것이?��.** ?��?��?�� NA?���? ?��?��?��버리?�� 것�?� ?�� 좋�?� ?��?��?��?��?�� ?��?��.<br><br> ?��리조?��?�� ?��각해�? NA ?��처리문제 ?��결법<br> 1. 보류?��?��.<br> 2. 모두 ?��거한?��.<br> **3. ?�� 3?�� 범주�? 만든?��. ( 범주?��?���? 만들?��?�� ?��결하�? )**<br> **4. ??�체값?�� 찾는?��. (?��, int?��?���? 만들 ?�� ?��?�� 변?��?���?)**<br> 5. 기�?� 방법<br><br><br> ?��?��?�� 말했?��?��, 1번의 NA�? ?��?��?�� 보류?��?�� 것�?� ?��?��?�� ?��비일 ?��?�� ?��?��. 그리�? 2번의 NA�? 모두 ?��거하?�� 것�?� ?��?��?�� NA�? 보류?��?�� 것과 같�?� 말이?��. 그리�? ?��리�?� ?���? 고려?��?��?�� 방법??� 3번과 4번일 것이?��.<br> 5번의 경우?��, ?��?�� 모형?�� 만들?��보고, �? 변?��?�� �? 중요?��가 ?��??� 것들?�� 중심?���? ?��처리?��?�� 방식 ?��?�� ?��?�� 것이?��. ?�� 방식?��??� ?�� ?��로젝?��가 ?��?�� ?��?�� 개인?��?���? 만들?���? ?��각이?��.<br><br><br><br>
 
-2. 전처리 하기 전의 데이터셋 의사결정나무<br>
+2. ?��처리 ?���? ?��?�� ?��?��?��?�� ?��?��결정?���?<br>
 ---------------------------------------------
 
-전처리를 하지 않은 상태에서 만든 모형은 아마도 NA를 모두 제거한 상태와 같을 것이다. 위에서 해결법 1번과 2번에 해당하는 방식일 것이다.<br><br>
+?��처리�? ?��지 ?��??� ?��?��?��?�� 만든 모형??� ?��마도 NA�? 모두 ?��거한 ?��?��??� 같을 것이?��. ?��?��?�� ?��결법 1번과 2번에 ?��?��?��?�� 방식?�� 것이?��.<br><br>
 
-\*\* dataset을 trainset과 validationset으로 나누기\*\*
+\*\* dataset?�� trainset�? validationset?���? ?��?���?\*\*
 
 ``` {r}
 set.seed(123)
@@ -186,13 +184,13 @@ index <- sample(1:2,
                 prob = c(0.7,0.3),
                 replace = TRUE)
 
-# t은 trainset, v는 validationset이다.
-# 현재 testset의 목표변수를 알 수 없으므로, 어쩔 수 없이 dataset을 q1과 q2로 분리하여 예측률을 확인하도록 한다.
+# t??� trainset, v?�� validationset?��?��.
+# ?��?�� testset?�� 목표변?���? ?�� ?�� ?��?��므�?, ?���? ?�� ?��?�� dataset?�� q1�? q2�? 분리?��?�� ?��측률?�� ?��?��?��?���? ?��?��.
 dataset.t <- dataset[index == 1, ]
 dataset.v <- dataset[index == 2, ]
 ```
 
-<br><br> \*\* 의사결정나무 모형 적합해보기\*\*
+<br><br> \*\* ?��?��결정?���? 모형 ?��?��?��보기\*\*
 
 ``` {r}
 fitTree <- rpart(HasDetections ~.,
@@ -213,7 +211,7 @@ confusionMatrix(trPred, trReal, positive = '1')
 F1_Score(trPred, trReal)
 ```
 
-<br><br> **랜덤포레스트 모형 적합해보기**
+<br><br> **?��?��?��?��?��?�� 모형 ?��?��?��보기**
 
 ``` {r}
 # AvSigVersion
@@ -221,7 +219,7 @@ F1_Score(trPred, trReal)
 # OsBuildLab
 # Census_OSVersion
 
-# 임시방편으로 레벨의 수가 많은 column을 제거하고 랜덤포레스트 모형에 적합하였다.
+# ?��?��방편?���? ?��벨의 ?��가 많�?� column?�� ?��거하�? ?��?��?��?��?��?�� 모형?�� ?��?��?��??�?��.
 
 dataset.t.i <- dplyr::select(dataset.t,-c(AvSigVersion,
                                           AppVersion,
@@ -252,22 +250,22 @@ confusionMatrix(trPred, trReal, positive = '1')
 F1_Score(trPred, trReal)
 ```
 
-<br><br> 의사결정나무 보다도 상당히 낮은 민감도를 보이며, NA값들을 제거하고 보니, 남은 행들이 거의 없다시피 하였다. 따라서 전처리를 통해서, NA값을 범주로 만들거나, 특정 변수들을 int형으로 변환한 후, NA값을 대체값으로 대체하는 방법을 사용하기로 하였다.<br><br><br><br>
+<br><br> ?��?��결정?���? 보다?�� ?��?��?�� ?��??� 민감?���? 보이�?, NA값들?�� ?��거하�? 보니, ?��??� ?��?��?�� 거의 ?��?��?��?�� ?��??�?��. ?��?��?�� ?��처리�? ?��?��?��, NA값을 범주�? 만들거나, ?��?�� 변?��?��?�� int?��?���? 변?��?�� ?��, NA값을 ??�체값?���? ??�체하?�� 방법?�� ?��?��?��기로 ?��??�?��.<br><br><br><br>
 
-3. NA값이 있는 변수들을 범주형으로 전처리하기
+3. NA값이 ?��?�� 변?��?��?�� 범주?��?���? ?��처리?���?
 ---------------------------------------------
 
-<br><br> 위에서 보았듯이, NA값을 전처리하지 않고, 그대로 사용한다면 좋은 예측 모형을 기대하기 어려울 것 같다. 그냥 50%확률로 찍어서 예측하는 것과 비슷한 정도이다.<br>**또한, 데이터를 확인하는 과정에서 NA값에 의미가 있는 경우를 확인하였다.** 예를 들자면, 변수 **IsProtected**의 경우에는 1일 때는 백신을 실행 중, 0일 때는 업데이트를 하지 않은 백신을 실행 중, **NA일 경우 백신을 사용하지 않는다.** 라는 의미가 된다.<br><br>따라서 NA를 범주로 처리해보기로 하였다.<br><br>
+<br><br> ?��?��?�� 보았?��?��, NA값을 ?��처리?��지 ?���?, 그�?��? ?��?��?��?���? 좋�?� ?���? 모형?�� 기�?�?���? ?��?��?�� �? 같다. 그냥 50%?��률로 찍어?�� ?��측하?�� 것과 비슷?�� ?��?��?��?��.<br>**?��?��, ?��?��?���? ?��?��?��?�� 과정?��?�� NA값에 ?��미�?� ?��?�� 경우�? ?��?��?��??�?��.** ?���? ?��?���?, 변?�� **IsProtected**?�� 경우?��?�� 1?�� ?��?�� 백신?�� ?��?�� �?, 0?�� ?��?�� ?��?��?��?���? ?��지 ?��??� 백신?�� ?��?�� �?, **NA?�� 경우 백신?�� ?��?��?��지 ?��?��?��.** ?��?�� ?��미�?� ?��?��.<br><br>?��?��?�� NA�? 범주�? 처리?��보기�? ?��??�?��.<br><br>
 
 ``` {r}
-# 전처리할 데이터셋
+# ?��처리?�� ?��?��?��?��
 dataset.q <- dataset
 ```
 
-**버전을 담고 있는 factor**
+**버전?�� ?���? ?��?�� factor**
 
 ``` {r}
-# 버전을 담고 있는 factor
+# 버전?�� ?���? ?��?�� factor
 factor.name <- c('EngineVersion',
                  'AppVersion',
                  'AvSigVersion',
@@ -284,10 +282,10 @@ for(i in 1:4){
 }
 ```
 
-<br><br> **""라는 이름의 레벨을 가진 factor에 대해서 '미응답'으로 이름 바꾸기**
+<br><br> **""?��?�� ?��름의 ?��벨을 가�? factor?�� ??�?��?�� '미응?��'?���? ?���? 바꾸�?**
 
 ``` {r}
-# "" 가 포함된 factor를 '미응답'으로 바꾸기
+# "" 가 ?��?��?�� factor�? '미응?��'?���? 바꾸�?
 factor.name <- c('Census_PrimaryDiskTypeName',
                  'Census_ChassisTypeName',
                  'Census_PowerPlatformRoleName')
@@ -295,16 +293,16 @@ factor.name <- c('Census_PrimaryDiskTypeName',
 for(i in 1:3){
   
   dataset.q[,factor.name[i]] <- as.character(dataset.q[,factor.name[i]])
-  dataset.q[,factor.name[i]] <- ifelse(dataset.q[,factor.name[i]] == "", yes = "미응답", dataset.q[,factor.name[i]])
+  dataset.q[,factor.name[i]] <- ifelse(dataset.q[,factor.name[i]] == "", yes = "미응?��", dataset.q[,factor.name[i]])
   dataset.q[,factor.name[i]] <- as.factor(dataset.q[,factor.name[i]])
   
 }
 ```
 
-<br><br> **NA값이 대다수인 변수**
+<br><br> **NA값이 ??�?��?��?�� 변?��**
 
 ``` {r}
-# NA값이 대다수인 변수
+# NA값이 ??�?��?��?�� 변?��
 factor.name <- c('DefaultBrowsersIdentifier',
                  'OrganizationIdentifier',
                  'Census_IsFlightingInternal',
@@ -317,10 +315,10 @@ for(i in 1:length(factor.name)){
 }
 ```
 
-<br><br> **기타 변수**
+<br><br> **기�?� 변?��**
 
 ``` {r}
-# 기타 변수
+# 기�?� 변?��
 factor.name <- c('IsBeta',
                  'IsSxsPassiveMode',
                  'AVProductStatesIdentifier',
@@ -370,15 +368,15 @@ for(i in 1:length(factor.name)){
 }
 ```
 
-<br><br> **수치형, 혹은 범주형으로 전환할 수 있는 변수**<br> 이 변수들의 경우에는 2가지 모두 사용해서 확인해본다.
+<br><br> **?��치형, ?��??� 범주?��?���? ?��?��?�� ?�� ?��?�� 변?��**<br> ?�� 변?��?��?�� 경우?��?�� 2가지 모두 ?��?��?��?�� ?��?��?��본다.
 
 ``` {r}
-# int형으로 그대로 사용할 수 있고, 혹은 범주형으로 전환할 수 있는 변수
-# 이 변수의 경우 2가지를 모두해서 확인해본다.
+# int?��?���? 그�?��? ?��?��?�� ?�� ?���?, ?��??� 범주?��?���? ?��?��?�� ?�� ?��?�� 변?��
+# ?�� 변?��?�� 경우 2가지�? 모두?��?�� ?��?��?��본다.
 
-# 범주형으로 전환할 데이터셋
+# 범주?��?���? ?��?��?�� ?��?��?��?��
 dataset.q.1 <- dataset.q
-# int형 그대로 사용할 데이터셋
+# int?�� 그�?��? ?��?��?�� ?��?��?��?��
 dataset.q.2 <- dataset.q
 
 
@@ -391,14 +389,14 @@ factor.name <- c('Census_ProcessorCoreCount',
                  'Census_InternalPrimaryDisplayResolutionVertical')
 
 
-# (1) NA처리하고, 범주형으로 변환하기
+# (1) NA처리?���?, 범주?��?���? 변?��?���?
 for(i in 1:length(factor.name)){
   
   dataset.q.1[,factor.name[i]] <- NAtoFactor(dataset.q.1[,factor.name[i]])
   
 }
 
-# (2) NA를 대체값으로 대체하기
+# (2) NA�? ??�체값?���? ??�체하�?
 for(i in 1:length(factor.name)){
 
   dataset.q.2[is.na(dataset.q.2[,factor.name[i]]),
@@ -407,42 +405,42 @@ for(i in 1:length(factor.name)){
 }
 ```
 
-<br><br> **전처리된 데이터셋 1번의 NA와 레벨수 확인하기**
+<br><br> **?��처리?�� ?��?��?��?�� 1번의 NA??� ?��벨수 ?��?��?���?**
 
 ``` {r}
-# NA값과 레벨수 확인하기
+# NA값과 ?��벨수 ?��?��?���?
 factor.name <- colnames(dataset.q.1)
 
 for(i in 1:length(factor.name)){
   
-  cat('변수명 : ', factor.name[i], "\n")
+  cat('변?���? : ', factor.name[i], "\n")
   cat('NA : ', naniar::n_miss(dataset.q.1[,factor.name[i]]), '\n')
-  cat('레벨수 : ', nlevels(dataset.q.1[,factor.name[i]]), 
+  cat('?��벨수 : ', nlevels(dataset.q.1[,factor.name[i]]), 
       '\n\n')
   
 }
 ```
 
-<br><br> **전처리된 데이터셋 2번의 NA와 레벨수 확인하기**
+<br><br> **?��처리?�� ?��?��?��?�� 2번의 NA??� ?��벨수 ?��?��?���?**
 
 ``` {r}
-# NA값과 레벨수 확인하기
+# NA값과 ?��벨수 ?��?��?���?
 factor.name <- colnames(dataset.q.2)
 
 for(i in 1:length(factor.name)){
   
-  cat('변수명 : ', factor.name[i], "\n")
+  cat('변?���? : ', factor.name[i], "\n")
   cat('NA : ', naniar::n_miss(dataset.q.2[,factor.name[i]]), '\n')
-  cat('레벨수 : ', nlevels(dataset.q.2[,factor.name[i]]), 
+  cat('?��벨수 : ', nlevels(dataset.q.2[,factor.name[i]]), 
       '\n\n')
   
 }
 ```
 
-4.전처리한 데이터셋으로 의사결정나무 적합하기<br><br>
+4.?��처리?�� ?��?��?��?��?���? ?��?��결정?���? ?��?��?���?<br><br>
 -----------------------------------------------------
 
-**전처리한 데이터셋으로 의사결정나무 적합하기 1**
+**?��처리?�� ?��?��?��?��?���? ?��?��결정?���? ?��?��?���? 1**
 
 ``` {r}
 dataset.q.1.t <- dataset.q.1[index == 1, ]
@@ -466,7 +464,7 @@ confusionMatrix(trPred, trReal, positive = '1')
 F1_Score(trPred, trReal)
 ```
 
-<br><br> **전처리한 데이터셋으로 의사결정나무 적합하기 2**
+<br><br> **?��처리?�� ?��?��?��?��?���? ?��?��결정?���? ?��?��?���? 2**
 
 ``` {r}
 dataset.q.2.t <- dataset.q.2[index == 1, ]
@@ -490,14 +488,14 @@ confusionMatrix(trPred, trReal, positive = '1')
 F1_Score(trPred, trReal)
 ```
 
-5. 변수 레벨 축소해보기
+5. 변?�� ?���? 축소?��보기
 -----------------------
 
-일부 변수들의 NA값을 Mean으로 대체할 때의 정확도가 조금 더 높았다. 하지만, 아무런 전처리를 하지 않은 상태에서 적합한 의사결정나무 모형보다는 부족한 수치를 보이고 있다. identifier와 같은 변수들을 factor로 변환하면서 수많은 레벨이 생성되어 오히려 전체적인 지표들의 수치가 감소한 것 같다.<br><br>따라서 레벨의 수를 어느정도 줄인다면, 더 좋은 결과가 나올 것이라고 판단했다.<br><br>HasDetections(목표변수)의 1과 0의 빈도가 유사한 것끼리 그룹으로 묶어서 레벨의 수가 50개 이상인 컬럼을 50개 이하의 레벨로 줄여보도록 하였다.<br><br> **50개 이상의 레벨의 수 줄이기**
+?��부 변?��?��?�� NA값을 Mean?���? ??�체할 ?��?�� ?��?��?��가 조금 ?�� ?��?��?��. ?��지�?, ?��무런 ?��처리�? ?��지 ?��??� ?��?��?��?�� ?��?��?�� ?��?��결정?���? 모형보다?�� 부족한 ?��치�?? 보이�? ?��?��. identifier??� 같�?� 변?��?��?�� factor�? 변?��?��면서 ?��많�?� ?��벨이 ?��?��?��?�� ?��?��?�� ?��체적?�� 지?��?��?�� ?��치�?� 감소?�� �? 같다.<br><br>?��?��?�� ?��벨의 ?���? ?��?��?��?�� 줄인?���?, ?�� 좋�?� 결과가 ?��?�� 것이?���? ?��?��?��?��.<br><br>HasDetections(목표변?��)?�� 1�? 0?�� 빈도가 ?��?��?�� 것끼�? 그룹?���? 묶어?�� ?��벨의 ?��가 50�? ?��?��?�� 컬럼?�� 50�? ?��?��?�� ?��벨로 줄여보도�? ?��??�?��.<br><br> **50�? ?��?��?�� ?��벨의 ?�� 줄이�?**
 
 ``` {r}
 factor.name <- colnames(dataset.q.1)
-Com.factor.name <- c() # 레벨이 50개 이상인 컬럼명
+Com.factor.name <- c() # ?��벨이 50�? ?��?��?�� 컬럼�?
 
 
 for(i in 1:length(factor.name)){
@@ -518,12 +516,12 @@ for(i in 1:length(Com.factor.name)){
   
 }
 
-# 레벨 수 다시 한 번 확인해보기
+# ?���? ?�� ?��?�� ?�� �? ?��?��?��보기
 for(i in 1:length(factor.name)){
   
-  cat('변수명 : ', factor.name[i], "\n")
+  cat('변?���? : ', factor.name[i], "\n")
   cat('NA : ', naniar::n_miss(dataset.q.1[,factor.name[i]]), '\n')
-  cat('레벨수 : ', nlevels(dataset.q.1[,factor.name[i]]), 
+  cat('?��벨수 : ', nlevels(dataset.q.1[,factor.name[i]]), 
       '\n\n')
   
 }
@@ -531,7 +529,7 @@ for(i in 1:length(factor.name)){
 
 ``` {r}
 factor.name <- colnames(dataset.q.2)
-Com.factor.name <- c() # 레벨이 50개 이상인 컬럼명
+Com.factor.name <- c() # ?��벨이 50�? ?��?��?�� 컬럼�?
 
 
 for(i in 1:length(factor.name)){
@@ -552,21 +550,21 @@ for(i in 1:length(Com.factor.name)){
   
 }
 
-# 레벨 수 다시 한 번 확인해보기
+# ?���? ?�� ?��?�� ?�� �? ?��?��?��보기
 for(i in 1:length(factor.name)){
   
-  cat('변수명 : ', factor.name[i], "\n")
+  cat('변?���? : ', factor.name[i], "\n")
   cat('NA : ', naniar::n_miss(dataset.q.2[,factor.name[i]]), '\n')
-  cat('레벨수 : ', nlevels(dataset.q.2[,factor.name[i]]), 
+  cat('?��벨수 : ', nlevels(dataset.q.2[,factor.name[i]]), 
       '\n\n')
   
 }
 ```
 
-6. 축소한 데이터셋으로 의사결정나무, 랜덤포레스트 적합하기
+6. 축소?�� ?��?��?��?��?���? ?��?��결정?���?, ?��?��?��?��?��?�� ?��?��?���?
 ----------------------------------------------------------
 
-<br><br> 이제부터 의사결정나무를 적합해보고, 랜덤포레스트는 튜닝까지 해보겠다.<br><br><br><br> **의사결정나무 적합하기 1**
+<br><br> ?��?��부?�� ?��?��결정?��무�?? ?��?��?��보고, ?��?��?��?��?��?��?�� ?��?��까�?� ?��보겠?��.<br><br><br><br> **?��?��결정?���? ?��?��?���? 1**
 
 ``` {r}
 dataset.q.1.t <- dataset.q.1[index == 1, ]
@@ -586,24 +584,24 @@ trPred <- predict(fitTree,
 
 trReal <- dataset.q.1.v$HasDetections
 
-# 혼동행렬
+# ?��?��?��?��
 confusionMatrix(trPred, trReal, positive = '1')
 
 # F1_Score
 F1_Score(trPred, trReal)
 
-# auroc 확인용
+# auroc ?��?��?��
 Pred <- trPred %>% as.numeric()
 Real <- trReal %>% as.numeric()
 
 # auroc
 auc(Real, Pred)
 
-# 비용복잡도 표 출력
+# 비용복잡?�� ?�� 출력
 printcp(fitTree)
 ```
 
-**의사결정나무 적합하기 2**
+**?��?��결정?���? ?��?��?���? 2**
 
 ``` {r}
 dataset.q.2.t <- dataset.q.2[index == 1, ]
@@ -623,24 +621,24 @@ trPred <- predict(fitTree,
 
 trReal <- dataset.q.2.v$HasDetections
 
-# 혼동행렬
+# ?��?��?��?��
 confusionMatrix(trPred, trReal, positive = '1')
 
 # F1_Score
 F1_Score(trPred, trReal)
 
-# auroc 확인용
+# auroc ?��?��?��
 Pred <- trPred %>% as.numeric()
 Real <- trReal %>% as.numeric()
 
 # auroc
 auc(Real, Pred)
 
-# 비용복잡도 표 출력
+# 비용복잡?�� ?�� 출력
 printcp(fitTree)
 ```
 
-<br><br><br> 레벨의 수를 축소한 이후로는 모든 컬럼을 범주형으로 변경한 데이터셋에서 더 높은 F1 점수와 auroc 값이 나왔다. 상황이 역전되었다. 각각 모형에서 가장 마지막 분리에서 xerror가 가장 낮게 나왔으므로, 가지치기를 할 필요가 없었다. 그렇다면 이제 모든 컬럼을 범주형으로 변경한 데이터셋으로 랜덤포레스트 모형을 적합해보기로 하였다.<br><br> **랜덤포레스트 모형 간단하게 적합해보기**
+<br><br><br> ?��벨의 ?���? 축소?�� ?��?��로는 모든 컬럼?�� 범주?��?���? 변경한 ?��?��?��?��?��?�� ?�� ?��??� F1 ?��?��??� auroc 값이 ?��?��?��. ?��?��?�� ?��?��?��?��?��. 각각 모형?��?�� 가?�� 마�?��? 분리?��?�� xerror가 가?�� ?���? ?��?��?��므�?, 가지치기�? ?�� ?��?��가 ?��?��?��. 그렇?���? ?��?�� 모든 컬럼?�� 범주?��?���? 변경한 ?��?��?��?��?���? ?��?��?��?��?��?�� 모형?�� ?��?��?��보기�? ?��??�?��.<br><br> **?��?��?��?��?��?�� 모형 간단?���? ?��?��?��보기**
 
 ``` {r}
 fitRFC <- randomForest(x = dataset.q.1.t[,-82],
@@ -657,22 +655,22 @@ trPred <- predict(fitRFC,
                   type = 'response')
 trReal <- dataset.q.1.v$HasDetections
 
-# 모형 적합 결과 확인하기 ( 오분류율 확인하기 )
+# 모형 ?��?�� 결과 ?��?��?���? ( ?��분류?�� ?��?��?���? )
 print(fitRFC)
 
-# 변수 중요도 출력하기
+# 변?�� 중요?�� 출력?���?
 importance(fitRFC)
 
-# 마진 그래프
+# 마진 그래?��
 plot(margin(fitRFC))
 
-# 혼동행렬
+# ?��?��?��?��
 confusionMatrix(trPred, trReal, positive = '1')
 
 # F1_Score
 F1_Score(trPred, trReal)
 
-# auroc 확인용
+# auroc ?��?��?��
 Pred <- trPred %>% as.numeric()
 Real <- trReal %>% as.numeric()
 
@@ -680,11 +678,11 @@ Real <- trReal %>% as.numeric()
 auc(Real, Pred)
 ```
 
-<br><br> MeanDecreaseAccuracy에서 크게 영향을 주는 변수는,<br> AppVersion 13.2078028<br> AVProductStatesIdentifier 21.1545553<br> CountryIdentifier 10.5903571<br> CityIdentifier 51.7872658<br> SmartScreen 31.7732623<br> Census\_OEMModelIdentifier 40.9204674<br> Census\_ProcessorModelIdentifier 13.0899241<br> Census\_SystemVolumeTotalCapacity 103.9377516<br> Census\_InternalBatteryNumberOfCharges 16.4877933<br> Census\_OSInstallLanguageIdentifier 13.7160384<br> Census\_FirmwareVersionIdentifier 31.2409193<br> Wdft\_RegionIdentifier 12.5699366<br><br> 이것들이다. 각 변수들의 의미를 간단하게 알아보자면,<br> 1. windows defender의 버전<br> 2. 안티 바이러스 백신의 버전<br> 3. 국가코드, 도시코드, 지역코드, 언어코드<br> 4. smartscreen(윈도우 10의 방화벽 기능)<br> 5. OEM의 종류(운영체제를 대량으로 구매하여 설치하는 방식)<br> 6. CPU의 모델 명<br> 7. 운영체제가 깔려있는 파티션의 크기<br> 8. 방화벽의 버전<br> 이다. 그리고 혼동행렬을 확인해본 결과, 이 모형은 감염되지 않은 PC를 더 잘 찾아내는 특이도와 정밀도가 높은 모형이다.<br> 이 모형은 정밀도가 상당히 높은 편이지만, 악성 코드에 감염된 컴퓨터를 감염되지 않았다고 판단하는 경우가 상당하기 때문에 아쉬운 모형이다.<br> 그렇기 때문에 튜닝을 한다면, 민감도가 더 높은 모형이 나올 수 있지 않을까 생각을 해보았다.<br> **랜덤포레스트 모형 튜닝해보기**
+<br><br> MeanDecreaseAccuracy?��?�� ?���? ?��?��?�� 주는 변?��?��,<br> AppVersion 13.2078028<br> AVProductStatesIdentifier 21.1545553<br> CountryIdentifier 10.5903571<br> CityIdentifier 51.7872658<br> SmartScreen 31.7732623<br> Census\_OEMModelIdentifier 40.9204674<br> Census\_ProcessorModelIdentifier 13.0899241<br> Census\_SystemVolumeTotalCapacity 103.9377516<br> Census\_InternalBatteryNumberOfCharges 16.4877933<br> Census\_OSInstallLanguageIdentifier 13.7160384<br> Census\_FirmwareVersionIdentifier 31.2409193<br> Wdft\_RegionIdentifier 12.5699366<br><br> ?��것들?��?��. �? 변?��?��?�� ?��미�?? 간단?���? ?��?��보자�?,<br> 1. windows defender?�� 버전<br> 2. ?��?�� 바이?��?�� 백신?�� 버전<br> 3. �?가코드, ?��?��코드, 지?��코드, ?��?��코드<br> 4. smartscreen(?��?��?�� 10?�� 방화�? 기능)<br> 5. OEM?�� 종류(?��?��체제�? ??�?��?���? 구매?��?�� ?��치하?�� 방식)<br> 6. CPU?�� 모델 �?<br> 7. ?��?��체제가 깔려?��?�� ?��?��?��?�� ?���?<br> 8. 방화벽의 버전<br> ?��?��. 그리�? ?��?��?��?��?�� ?��?��?���? 결과, ?�� 모형??� 감염?��지 ?��??� PC�? ?�� ?�� 찾아?��?�� ?��?��?��??� ?��밀?��가 ?��??� 모형?��?��.<br> ?�� 모형??� ?��밀?��가 ?��?��?�� ?��??� ?��?��지�?, ?��?�� 코드?�� 감염?�� 컴퓨?���? 감염?��지 ?��?��?���? ?��?��?��?�� 경우가 ?��?��?���? ?��문에 ?��?��?�� 모형?��?��.<br> 그렇�? ?��문에 ?��?��?�� ?��?���?, 민감?��가 ?�� ?��??� 모형?�� ?��?�� ?�� ?��지 ?��?���? ?��각을 ?��보았?��.<br> **?��?��?��?��?��?�� 모형 ?��?��?��보기**
 
 ``` {r}
-# # 총 32개의 조합
-# # 와 이런 좋은 함수가 있었어?
+# # �? 32개의 조합
+# # ??� ?��?�� 좋�?� ?��?��가 ?��?��?��?
 # grid <- expand.grid(ntree = c(100),
 #                     mtry = c(3,5,7,8,12,13,14,15))
 # 
@@ -707,16 +705,16 @@ auc(Real, Pred)
 #                       do.trace = 50,
 #                       keep.forest = TRUE)
 #   
-#   # 예측값
+#   # ?��측값
 #   trPred <- fit$test$predicted
-#   # 실제값
+#   # ?��?���?
 #   trReal <- dataset.q.1.v$HasDetections
-#   # 혼동행렬
+#   # ?��?��?��?��
 #   con <- confusionMatrix(trPred, trReal, positive = '1')
 #   
-#   # 오분류수
+#   # ?��분류?��
 #   mcSum <- sum(fit$predicted != dataset.q.1.t$HasDetections)
-#   # 오분류율
+#   # ?��분류?��
 #   mcrate <- mcSum / nrow(dataset.q.1.t)
 #   
 #   tuned <- rbind(tuned, 
@@ -731,7 +729,7 @@ auc(Real, Pred)
 # View(tuned)
 ```
 
-<br><br> 시간이 없는 관계로 매우 간단하게 그리드 서치를 하였다.<br> ntree = 500, mtry = 13정도로 랜덤포레스트 모형을 적합하면 적당할 것 같다.<br><br> **튜닝한 랜덤포레스트 모형**
+<br><br> ?��간이 ?��?�� 관계로 매우 간단?���? 그리?�� ?��치�?? ?��??�?��.<br> ntree = 500, mtry = 13?��?���? ?��?��?��?��?��?�� 모형?�� ?��?��?���? ?��?��?�� �? 같다.<br><br> **?��?��?�� ?��?��?��?��?��?�� 모형**
 
 ``` {r}
 fitRFC <- randomForest(x = dataset.q.1.t[,-82],
@@ -748,22 +746,22 @@ trPred <- predict(fitRFC,
                   type = 'response')
 trReal <- dataset.q.1.v$HasDetections
 
-# 모형 적합 결과 확인하기 ( 오분류율 확인하기 )
+# 모형 ?��?�� 결과 ?��?��?���? ( ?��분류?�� ?��?��?���? )
 print(fitRFC)
 
-# 변수 중요도 출력하기
+# 변?�� 중요?�� 출력?���?
 importance(fitRFC)
 
-# 마진 그래프
+# 마진 그래?��
 plot(margin(fitRFC))
 
-# 혼동행렬
+# ?��?��?��?��
 confusionMatrix(trPred, trReal, positive = '1')
 
 # F1_Score
 F1_Score(trPred, trReal)
 
-# auroc 확인용
+# auroc ?��?��?��
 Pred <- trPred %>% as.numeric()
 Real <- trReal %>% as.numeric()
 
@@ -771,13 +769,13 @@ Real <- trReal %>% as.numeric()
 auc(Real, Pred)
 ```
 
-7. 번외 - XGBoost 사용해보기<br><br>
+7. 번외 - XGBoost ?��?��?��보기<br><br>
 ------------------------------------
 
-각종 대회에서 높은 점수를 기록하는 머신러닝 알고리즘 중 하나인, XGBoost를 사용하여 성능을 평가해보기로 하였다.<br> **라벨링, 더미변수 함수**
+각종 ??�?��?��?�� ?��??� ?��?���? 기록?��?�� 머신?��?�� ?��고리�? �? ?��?��?��, XGBoost�? ?��?��?��?�� ?��?��?�� ?��가?��보기�? ?��??�?��.<br> **?��벨링, ?��미�?�?�� ?��?��**
 
 ``` {r}
-# 라벨링 함수 ( numeric vector로 반환 )
+# ?��벨링 ?��?�� ( numeric vector�? 반환 )
 MakingLabel <- function(data.variable){
   
   for(i in 1:nlevels(data.variable)){
@@ -790,7 +788,7 @@ MakingLabel <- function(data.variable){
   return(data.variable)
 }
 
-# 더미변수 만드는 함수 ( 더미변수들을 data.frame으로 반환 )
+# ?��미�?�?�� 만드?�� ?��?�� ( ?��미�?�?��?��?�� data.frame?���? 반환 )
 MakingDummy <- function(data.variable, data.name){
   
   result <- data.frame(index = 1:length(data.variable))
@@ -813,16 +811,16 @@ MakingDummy <- function(data.variable, data.name){
   
 }
 
-# 사용예시
+# ?��?��?��?��
 example.label <- MakingLabel(dataset.q.1$ProductName)
 example.dummy <- MakingDummy(dataset.q.1$ProductName,
                              'result')
 ```
 
-<br><br> **데이터셋 변환하기**
+<br><br> **?��?��?��?�� 변?��?���?**
 
 ``` {r}
-# 데이터셋
+# ?��?��?��?��
 dataset.n <- dataset.q.1
 
 HasDetections <- dataset.n$HasDetections %>% as.numeric()
@@ -831,9 +829,9 @@ HasDetections <- ifelse(HasDetections == 2,0,1)
 dataset.n.label <- dataset.n[, -82]
 dataset.n.dummy <- dataset.n
 
-# dataset.n.dummy의 레벨 수 자르기
+# dataset.n.dummy?�� ?���? ?�� ?��르기
 factor.name <- colnames(dataset.n.dummy)
-Com.factor.name <- c() # 레벨이 50개 이상인 컬럼명
+Com.factor.name <- c() # ?��벨이 50�? ?��?��?�� 컬럼�?
 
 
 for(i in 1:length(factor.name)){
@@ -856,23 +854,23 @@ for(i in 1:length(Com.factor.name)){
   
 }
 
-# 레벨 수 다시 확인하기
+# ?���? ?�� ?��?�� ?��?��?���?
 for(i in 1:length(factor.name)){
   
-  cat('변수명 : ', factor.name[i], "\n")
+  cat('변?���? : ', factor.name[i], "\n")
   cat('NA : ', naniar::n_miss(dataset.n.dummy[,factor.name[i]]), '\n')
-  cat('레벨수 : ', nlevels(dataset.n.dummy[,factor.name[i]]), 
+  cat('?��벨수 : ', nlevels(dataset.n.dummy[,factor.name[i]]), 
       '\n\n')
   
 }
 
-# 목표변수만 제거하기
+# 목표변?���? ?��거하�?
 dataset.n.dummy <- dataset.n.dummy[, -82]
 
-# factor.name에서 목표변수 제거하기
+# factor.name?��?�� 목표변?�� ?��거하�?
 factor.name <- colnames(dataset.n)[-82]
 
-# 1. 라벨링하기
+# 1. ?��벨링?���?
 for(i in 1:length(factor.name)){
   
   dataset.n.label[, factor.name[i]] <- MakingLabel(dataset.n.label[, factor.name[i]])
@@ -882,7 +880,7 @@ for(i in 1:length(factor.name)){
 dataset.n.label <- cbind(dataset.n.label, HasDetections)
 ncol(dataset.n.label)
 
-# 2. 더미변수화
+# 2. ?��미�?�?��?��
 for(i in 1:length(factor.name)){
   
   dataset.n.dummy <- cbind(dataset.n.dummy,
@@ -895,7 +893,7 @@ dataset.n.dummy <- dataset.n.dummy[,-c(1:81)]
 dataset.n.dummy <- cbind(dataset.n.dummy, HasDetections)
 ncol(dataset.n.dummy)
 
-# trainset과 validationset으로 나누기
+# trainset�? validationset?���? ?��?���?
 dataset.n.label.t <- dataset.n.label[index == 1, ]
 dataset.n.dummy.t <- dataset.n.dummy[index == 1, ]
 
@@ -903,15 +901,15 @@ dataset.n.label.v <- dataset.n.label[index == 2, ]
 dataset.n.dummy.v <- dataset.n.dummy[index == 2, ]
 ```
 
-<br><br> **XGBoost 사용해보기 1**
+<br><br> **XGBoost ?��?��?��보기 1**
 
 ``` {r}
-# 1. 라벨링한 데이터셋
+# 1. ?��벨링?�� ?��?��?��?��
 dtrain <- xgb.DMatrix(data = as.matrix(dataset.n.label.t[ ,-82]),
                       label= as.matrix(dataset.n.label.t[ , 82]))
 
 
-# 파라미터
+# ?��?��미터
 default_param<-list(
   objective = 'binary:logistic',
   booster = 'gbtree',
@@ -934,7 +932,7 @@ xgbcv <- xgb.cv(params = default_param,
 # nrounds
 xgbcv$best_iteration
 
-# xgboost 모형 적합하기
+# xgboost 모형 ?��?��?���?
 newxgb <- xgboost(params = default_param,
                   verbose = 1,
                   data = dtrain,
@@ -948,13 +946,13 @@ pred <- as.factor(pred) %>% relevel(ref = '1')
 
 real <- dataset.n.label.v[, 82] %>% as.factor() %>% relevel(ref = '1')
 
-# 혼동행렬
+# ?��?��?��?��
 confusionMatrix(pred, real, positive = '1')
 
 # F1_Score
 F1_Score(pred, real)
 
-# auroc 확인용
+# auroc ?��?��?��
 Pred <- pred %>% as.numeric()
 Real <- real %>% as.numeric()
 
@@ -962,15 +960,15 @@ Real <- real %>% as.numeric()
 auc(Real, Pred)
 ```
 
-<br><br> **XGBoost 사용해보기 2**
+<br><br> **XGBoost ?��?��?��보기 2**
 
 ``` {r}
-# 2. 더미변수로 만든 데이터셋
+# 2. ?��미�?�?���? 만든 ?��?��?��?��
 dtrain <- xgb.DMatrix(data = as.matrix(dataset.n.dummy.t[ ,-82]),
                       label= as.matrix(dataset.n.dummy.t[ , 82]))
 
 
-# 파라미터
+# ?��?��미터
 default_param<-list(
   objective = 'binary:logistic',
   booster = 'gbtree',
@@ -993,7 +991,7 @@ xgbcv <- xgb.cv(params = default_param,
 # nrounds
 xgbcv$best_iteration
 
-# xgboost 모형 적합하기
+# xgboost 모형 ?��?��?���?
 newxgb <- xgboost(params = default_param,
                   verbose = 1,
                   data = dtrain,
@@ -1007,13 +1005,13 @@ pred <- as.factor(pred) %>% relevel(ref = '1')
 
 real <- dataset.n.dummy.v[, 82] %>% as.factor() %>% relevel(ref = '1')
 
-# 혼동행렬
+# ?��?��?��?��
 confusionMatrix(pred, real, positive = '1')
 
 # F1_Score
 F1_Score(pred, real)
 
-# auroc 확인용
+# auroc ?��?��?��
 Pred <- pred %>% as.numeric()
 Real <- real %>% as.numeric()
 
@@ -1023,7 +1021,7 @@ auc(Real, Pred)
 
 #### ?<br><br>
 
-8. 마무리
+8. 마무�?
 ---------
 
-우리들의 관심분야인 악성코드에 대한 예측 데이터셋에 대해서는 어느정도 개요가 잡힌 상태였지만, 튜닝과 전처리에 있어서 여러가지 아쉬운 한계점들이 있었다.<br> 1. 1500만행의 실제 데이터에서는 testset에는 있지만, trainset에는 없는 Identifier가 있기 때문에, 약 5~10%정도의 정보를 사용하지 못하는 것을 확인했다.<br><br> 2. 실제 데이터에서는 현재의 방법 중 몇군대를 수정해야하고, 그로 인해서 치명적인 오차가 발생할 수도 있다.<br><br> 3. 컴퓨터의 사양 문제로 실제 데이터는 전처리 시간에만 7일 이상이 소요될 것이다.<br><br> 4. 그렇기 때문에, 실제 데이터를 다뤄보지 못하였고, 다양한 방법들을 고민하기에는 한계가 있었다. 이 과정이 끝난 후에 개인적으로 이 대회를 마무리 지을 생각이다.
+?��리들?�� 관?��분야?�� ?��?��코드?�� ??�?�� ?���? ?��?��?��?��?�� ??�?��?��?�� ?��?��?��?�� 개요가 ?��?�� ?��?��??�지�?, ?��?���? ?��처리?�� ?��?��?�� ?��?��가지 ?��?��?�� ?��계점?��?�� ?��?��?��.<br> 1. 1500만행?�� ?��?�� ?��?��?��?��?��?�� testset?��?�� ?��지�?, trainset?��?�� ?��?�� Identifier가 ?���? ?��문에, ?�� 5~10%?��?��?�� ?��보�?? ?��?��?��지 못하?�� 것을 ?��?��?��?��.<br><br> 2. ?��?�� ?��?��?��?��?��?�� ?��?��?�� 방법 �? 몇군??��? ?��?��?��?��?���?, 그로 ?��?��?�� 치명?��?�� ?��차�?� 발생?�� ?��?�� ?��?��.<br><br> 3. 컴퓨?��?�� ?��?�� 문제�? ?��?�� ?��?��?��?�� ?��처리 ?��간에�? 7?�� ?��?��?�� ?��?��?�� 것이?��.<br><br> 4. 그렇�? ?��문에, ?��?�� ?��?��?���? ?��뤄보지 못하??��?, ?��?��?�� 방법?��?�� 고�?�하기에?�� ?��계�?� ?��?��?��. ?�� 과정?�� ?��?�� ?��?�� 개인?��?���? ?�� ??�?���? 마무�? 지?�� ?��각이?��.
