@@ -2,7 +2,7 @@
 title: "머신러닝 조별 프로젝트"
 author: "오준승-윤휘영-김수현-강민기"
 date: "2019년 2월 26일"
-output: github_document: html_preview: false
+output: html_document: keep_md: true
 
 ---
 
