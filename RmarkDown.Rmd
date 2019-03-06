@@ -22,7 +22,7 @@ library(purrr)
 library(e1071)
 library(xgboost) # xgboost
 library(ROCR) # roc 커브에 필요한 패키지
-library(pROC) # auroc
+library(pROC) # auroc #
 
 # setwd('') # 작업공간 설정하기
 # getwd() # 설정된 작업공간 확인하기
